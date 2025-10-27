@@ -1,0 +1,351 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Image Generator</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        h1 {
+            text-align: center;
+            color: white;
+            margin-bottom: 30px;
+            font-size: 2.5em;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.2);
+        }
+
+        .input-section {
+            background: white;
+            padding: 30px;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+            margin-bottom: 40px;
+        }
+
+        .input-group {
+            display: flex;
+            gap: 15px;
+            align-items: center;
+        }
+
+        #prompt-input {
+            flex: 1;
+            padding: 15px 20px;
+            font-size: 16px;
+            border: 2px solid #e0e0e0;
+            border-radius: 10px;
+            transition: border-color 0.3s;
+        }
+
+        #prompt-input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        #generate-btn {
+            padding: 15px 40px;
+            font-size: 16px;
+            font-weight: bold;
+            color: white;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border: none;
+            border-radius: 10px;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+
+        #generate-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+
+        #generate-btn:active {
+            transform: translateY(0);
+        }
+
+        #generate-btn:disabled {
+            background: #cccccc;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .image-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+            gap: 25px;
+        }
+
+        .image-card {
+            background: white;
+            border-radius: 15px;
+            overflow: hidden;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            transition: transform 0.3s;
+        }
+
+        .image-card:hover {
+            transform: translateY(-5px);
+        }
+
+        .image-wrapper {
+            width: 100%;
+            height: 350px;
+            background: #f5f5f5;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .image-wrapper img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .loading {
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            gap: 15px;
+        }
+
+        .loading.active {
+            display: flex;
+        }
+
+        .spinner {
+            width: 50px;
+            height: 50px;
+            border: 5px solid #f3f3f3;
+            border-top: 5px solid #667eea;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .placeholder-text {
+            color: #999;
+            font-size: 18px;
+        }
+
+        .image-number {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            background: rgba(102, 126, 234, 0.9);
+            color: white;
+            width: 30px;
+            height: 30px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            font-size: 14px;
+        }
+
+        .error-message {
+            background: #ff6b6b;
+            color: white;
+            padding: 15px;
+            border-radius: 10px;
+            margin-top: 15px;
+            display: none;
+        }
+
+        .error-message.active {
+            display: block;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>AI Image Generator</h1>
+
+        <div class="input-section">
+            <div class="input-group">
+                <input
+                    type="text"
+                    id="prompt-input"
+                    placeholder="Describe the image you want to generate..."
+                    autocomplete="off"
+                >
+                <button id="generate-btn">Generate Images</button>
+            </div>
+            <div class="error-message" id="error-message"></div>
+        </div>
+
+        <div class="image-grid" id="image-grid">
+            <!-- Image cards will be generated here -->
+        </div>
+    </div>
+
+    <script>
+        const promptInput = document.getElementById('prompt-input');
+        const generateBtn = document.getElementById('generate-btn');
+        const imageGrid = document.getElementById('image-grid');
+        const errorMessage = document.getElementById('error-message');
+
+        // Initialize 6 image cards
+        function initializeGrid() {
+            imageGrid.innerHTML = '';
+            for (let i = 1; i <= 6; i++) {
+                const card = createImageCard(i);
+                imageGrid.appendChild(card);
+            }
+        }
+
+        function createImageCard(number) {
+            const card = document.createElement('div');
+            card.className = 'image-card';
+            card.innerHTML = `
+                <div class="image-wrapper" id="image-${number}">
+                    <div class="loading" id="loading-${number}">
+                        <div class="spinner"></div>
+                        <span class="placeholder-text">Generating...</span>
+                    </div>
+                    <span class="placeholder-text" id="placeholder-${number}">Image ${number}</span>
+                    <div class="image-number">${number}</div>
+                </div>
+            `;
+            return card;
+        }
+
+        async function generateImages() {
+            const prompt = promptInput.value.trim();
+
+            if (!prompt) {
+                showError('Please enter a description for the images');
+                return;
+            }
+
+            hideError();
+            generateBtn.disabled = true;
+            generateBtn.textContent = 'Generating...';
+
+            // Show loading state for all cards
+            for (let i = 1; i <= 6; i++) {
+                const wrapper = document.getElementById(`image-${i}`);
+                const loading = document.getElementById(`loading-${i}`);
+                const placeholder = document.getElementById(`placeholder-${i}`);
+
+                // Remove any existing image
+                const existingImg = wrapper.querySelector('img');
+                if (existingImg) {
+                    existingImg.remove();
+                }
+
+                loading.classList.add('active');
+                placeholder.style.display = 'none';
+            }
+
+            // Generate 6 variations
+            const promises = [];
+            for (let i = 1; i <= 6; i++) {
+                promises.push(generateSingleImage(prompt, i));
+            }
+
+            await Promise.all(promises);
+
+            generateBtn.disabled = false;
+            generateBtn.textContent = 'Generate Images';
+        }
+
+        async function generateSingleImage(prompt, index) {
+            const wrapper = document.getElementById(`image-${index}`);
+            const loading = document.getElementById(`loading-${index}`);
+
+            try {
+                // Using Pollinations.ai as a free AI image generation service
+                // Add variation to each image by appending a unique seed
+                const seed = Math.floor(Math.random() * 1000000);
+                const timestamp = Date.now();
+                const enhancedPrompt = encodeURIComponent(`${prompt}`);
+                const imageUrl = `https://image.pollinations.ai/prompt/${enhancedPrompt}?width=1024&height=1024&seed=${seed}&nologo=true&timestamp=${timestamp}`;
+
+                console.log(`Generating image ${index} with URL:`, imageUrl);
+
+                // Create image element
+                const img = document.createElement('img');
+                img.alt = `Generated image ${index}`;
+                img.crossOrigin = 'anonymous';
+
+                // Wait for image to load with timeout
+                await new Promise((resolve, reject) => {
+                    const timeout = setTimeout(() => {
+                        reject(new Error('Image load timeout'));
+                    }, 30000); // 30 second timeout
+
+                    img.onload = () => {
+                        clearTimeout(timeout);
+                        resolve();
+                    };
+
+                    img.onerror = (e) => {
+                        clearTimeout(timeout);
+                        console.error(`Image ${index} load error:`, e);
+                        reject(new Error('Image failed to load'));
+                    };
+
+                    img.src = imageUrl;
+                });
+
+                // Hide loading and show image
+                loading.classList.remove('active');
+                wrapper.appendChild(img);
+
+            } catch (error) {
+                console.error(`Error generating image ${index}:`, error);
+                loading.innerHTML = `
+                    <span class="placeholder-text" style="color: #ff6b6b;">Failed: ${error.message}</span>
+                `;
+                loading.classList.add('active');
+            }
+        }
+
+        function showError(message) {
+            errorMessage.textContent = message;
+            errorMessage.classList.add('active');
+        }
+
+        function hideError() {
+            errorMessage.classList.remove('active');
+        }
+
+        // Event listeners
+        generateBtn.addEventListener('click', generateImages);
+
+        promptInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                generateImages();
+            }
+        });
+
+        // Initialize the grid on page load
+        initializeGrid();
+    </script>
+</body>
+</html>
